@@ -989,12 +989,13 @@ function openScan(){
   $('#scanModal').hidden=false; $('#scanList').innerHTML=''; $('#scanMsg').textContent='Starting camera…';
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ $('#scanMsg').textContent='This browser can’t use the camera here — open the page over https on your phone, or type the S/N below.'; return; }
   if(typeof Html5Qrcode==='undefined'){ $('#scanMsg').textContent='Scanner library didn’t load (check your connection) — type the S/N below.'; return; }
-  try{ qrScanner=new Html5Qrcode('scanReader',{verbose:false,experimentalFeatures:{useBarCodeDetectorIfSupported:true}}); }
+  const cfg={verbose:false};
+  if(typeof Html5QrcodeSupportedFormats!=='undefined') cfg.formatsToSupport=[Html5QrcodeSupportedFormats.QR_CODE];
+  try{ qrScanner=new Html5Qrcode('scanReader',cfg); }
   catch(e){ $('#scanMsg').textContent='Scanner error: '+(e&&e.message||e); return; }
-  const box=(w,h)=>{const m=Math.floor(Math.min(w,h)*0.82);return {width:m,height:m};};
-  qrScanner.start({facingMode:'environment'},{fps:12,qrbox:box,aspectRatio:1},
+  qrScanner.start({facingMode:'environment'},{fps:10},          /* full-frame scan (no qrbox crop) — reliable on iOS Safari */
     txt=>addScanned(txt), ()=>{})
-   .then(()=>{ $('#scanMsg').textContent='Point the camera at the QR or barcode'; })
+   .then(()=>{ $('#scanMsg').textContent='Hold the QR code steady in the camera'; })
    .catch(err=>{ const m=(err&&err.message||err||'').toString();
      $('#scanMsg').textContent = /permission|denied|NotAllowed/i.test(m)
        ? 'Camera blocked — allow camera access in your browser settings, then reopen. Or type the S/N below.'
