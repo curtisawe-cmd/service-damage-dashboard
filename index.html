@@ -532,7 +532,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
     <div id="scanReader" class="scanreader"></div>
     <div class="scanmsg" id="scanMsg">Point the camera at the pallet's QR or barcode</div>
     <div class="scanmanual">
-      <input type="text" id="scanManualSn" placeholder="…or type the S/N" autocomplete="off">
+      <input type="text" id="scanManualSn" placeholder="…or type S/N (last 5 digits kept)" autocomplete="off" inputmode="numeric">
       <button class="gbtn primary" id="scanManualAdd">Add</button>
     </div>
     <div class="scanlist" id="scanList"></div>
@@ -974,7 +974,7 @@ function scanToast(sn,dup){
   const list=$('#scanList'); list.prepend(li); while(list.children.length>6) list.lastChild.remove();
 }
 function addScanned(raw){
-  const sn=(raw||'').toString().trim(); if(!sn) return;
+  const sn=(raw||'').toString().replace(/\D/g,'').slice(-5); if(!sn) return;  // keep only the last 5 digits
   const now=Date.now(); if(sn===lastScan && now-lastScanT<2500) return; lastScan=sn; lastScanT=now;
   const dup=DATA.some(r=>(r.sn||'').trim()===sn);
   pushUndo();
