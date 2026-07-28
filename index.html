@@ -295,6 +295,26 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 .footrow .tag{font-family:var(--ff-display);color:var(--muted)}
 .footrow .r{margin-left:auto;display:flex;gap:18px}
 
+/* Scan button + camera modal */
+.gbtn.scan{border-color:var(--accent-line);color:var(--accent)}
+.gbtn.scan svg{color:var(--accent)}
+.scanmodal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:16px}
+.scanmodal[hidden]{display:none}
+.scanbox{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;width:100%;max-width:420px;max-height:94vh;overflow:auto;box-shadow:var(--shadow);padding:18px}
+.scanhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.scanhead span{font-family:var(--ff-display);font-weight:700;font-size:16px}
+.scanx{border:none;background:var(--surface);width:32px;height:32px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:15px}
+.scanreader{width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:230px;display:grid;place-items:center}
+.scanreader video{width:100%!important;height:auto!important;display:block}
+.scanmsg{font-size:13px;color:var(--muted);text-align:center;margin:12px 2px}
+.scanmanual{display:flex;gap:8px;margin-bottom:12px}
+.scanmanual input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);color:var(--text);font-size:16px;font-family:var(--ff-display);font-weight:600}
+.scanmanual input:focus{outline:none;border-color:var(--accent);background:var(--bg)}
+.scanlist{display:flex;flex-direction:column;gap:6px}
+.scanitem{background:var(--low-bg);color:var(--low);border-radius:9px;padding:8px 11px;font-size:13px}
+.scanitem.dup{background:var(--mod-bg);color:var(--mod)}
+.scanitem b{font-family:var(--ff-display)}
+
 @media(max-width:900px){
   .grid2,.heatgrid,.costgrid{grid-template-columns:1fr}
   .kpis{grid-template-columns:repeat(2,1fr)}
@@ -302,7 +322,25 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
   .shead .sub{margin-left:0;text-align:left;width:100%}
   .meta{margin-left:0;text-align:left}
 }
-@media(max-width:560px){.kpis{grid-template-columns:1fr}.hkicker,.hbtn .lbl2{display:none}.headrow{gap:10px}}
+@media(max-width:640px){
+  .wrap{padding:0 14px}
+  section.block{padding:30px 0}
+  .hero{padding:30px 0 22px}
+  .hero h1{font-size:clamp(26px,8vw,34px)}
+  .bigstat .v{font-size:clamp(40px,15vw,60px)}
+  .shead h2{font-size:20px}
+  .headrow{height:56px;gap:10px}
+  .hbtn{padding:8px 11px}
+  .hkicker,.hbtn .lbl2{display:none}
+  .kpis{grid-template-columns:1fr}
+  .dtoolbar{gap:8px}
+  .dsearch{max-width:none;order:5}
+  .dbtns{margin-left:0}
+  .gbtn{padding:10px 13px}
+  .dmgcell{width:34px;height:32px}
+  .delrow{width:32px;height:32px}
+  table.grid td.delcell,table.grid th.delcell{width:40px}
+}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -442,6 +480,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
       <span class="sub">The source records. Add, edit, or delete rows and click a zone cell to toggle its damage mark. Every change syncs live to everyone viewing this page.</span></div>
     <div class="dtoolbar">
       <button class="gbtn primary" id="addRow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add pallet</button>
+      <button class="gbtn scan" id="scanBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg>Scan</button>
       <button class="gbtn" id="undoBtn" title="Undo the last change (up to 5)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo <span class="uc"></span></button>
       <div class="dcount" id="dcount"></div>
       <span class="syncchip sync" id="syncStatus">● Connecting…</span>
@@ -487,8 +526,22 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 
 <div class="tip" id="tip"></div>
 
+<div class="scanmodal" id="scanModal" hidden>
+  <div class="scanbox">
+    <div class="scanhead"><span>Scan pallet S/N</span><button class="scanx" id="scanClose" aria-label="Close">&#10005;</button></div>
+    <div id="scanReader" class="scanreader"></div>
+    <div class="scanmsg" id="scanMsg">Point the camera at the pallet's QR or barcode</div>
+    <div class="scanmanual">
+      <input type="text" id="scanManualSn" placeholder="…or type the S/N" autocomplete="off">
+      <button class="gbtn primary" id="scanManualAdd">Add</button>
+    </div>
+    <div class="scanlist" id="scanList"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 /* ===== DATA MODEL ===== */
 const COLS=['load','date','sn','td','bd','sep','cb','ms','ml','cenb','retire','qa','notes','extra'];
@@ -912,6 +965,41 @@ $('#resetData').addEventListener('click',()=>{
   saveData(); renderDashboard(); renderGrid();
 });
 $('#undoBtn').addEventListener('click',doUndo);
+
+/* ===== QR / BARCODE SCAN → add pallet by S/N ===== */
+let qrScanner=null, lastScan='', lastScanT=0;
+function scanToast(sn,dup){
+  const li=document.createElement('div'); li.className='scanitem'+(dup?' dup':'');
+  li.innerHTML=`<b>${esc(sn)}</b> ${dup?'· repeat — already inspected':'· added'}`;
+  const list=$('#scanList'); list.prepend(li); while(list.children.length>6) list.lastChild.remove();
+}
+function addScanned(raw){
+  const sn=(raw||'').toString().trim(); if(!sn) return;
+  const now=Date.now(); if(sn===lastScan && now-lastScanT<2500) return; lastScan=sn; lastScanT=now;
+  const dup=DATA.some(r=>(r.sn||'').trim()===sn);
+  pushUndo();
+  const o={}; COLS.forEach(c=>o[c]=(DMG.includes(c)?0:'')); o.date=new Date().toISOString().slice(0,10); o.sn=sn;
+  DATA.unshift(o); saveData(); renderDashboard(); scanToast(sn,dup);
+  if(navigator.vibrate) navigator.vibrate(dup?[50,40,50]:70);
+}
+function openScan(){
+  $('#scanModal').hidden=false; $('#scanList').innerHTML=''; $('#scanMsg').textContent='Starting camera…';
+  if(typeof Html5Qrcode==='undefined'){ $('#scanMsg').textContent='Scanner did not load — type the S/N below.'; return; }
+  qrScanner=new Html5Qrcode('scanReader',{verbose:false});
+  qrScanner.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},
+    txt=>{ $('#scanMsg').textContent='Scanned ✓ — keep scanning, or close when done'; addScanned(txt); }, ()=>{})
+   .then(()=>{ $('#scanMsg').textContent='Point the camera at the pallet QR or barcode'; })
+   .catch(err=>{ $('#scanMsg').textContent='Camera unavailable — type the S/N below. ('+err+')'; });
+}
+function closeScan(){
+  if(qrScanner){ qrScanner.stop().then(()=>qrScanner.clear()).catch(()=>{}); qrScanner=null; }
+  $('#scanModal').hidden=true; filter=''; $('#search').value=''; page=1; renderGrid();
+}
+$('#scanBtn').addEventListener('click',openScan);
+$('#scanClose').addEventListener('click',closeScan);
+$('#scanModal').addEventListener('click',e=>{ if(e.target===$('#scanModal')) closeScan(); });
+$('#scanManualAdd').addEventListener('click',()=>{ const v=$('#scanManualSn').value; if(v.trim()){ addScanned(v); $('#scanManualSn').value=''; $('#scanManualSn').focus(); } });
+$('#scanManualSn').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#scanManualAdd').click(); });
 
 /* CSV export/import */
 const CSVHEAD=['Load #','Date','S/N','Top Deck','Bottom','Separation','CB','MS','ML','CENB','Retire','QA Review','Notes','Extra'];
