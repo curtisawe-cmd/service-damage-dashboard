@@ -542,7 +542,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ===== DATA MODEL ===== */
 const COLS=['load','date','sn','td','bd','sep','cb','ms','ml','cenb','retire','qa','notes','extra'];
@@ -968,7 +968,7 @@ $('#resetData').addEventListener('click',()=>{
 $('#undoBtn').addEventListener('click',doUndo);
 
 /* ===== QR / BARCODE SCAN → add pallet by S/N ===== */
-let qrScanner=null, lastScan='', lastScanT=0;
+let lastScan='', lastScanT=0, scanStream=null, scanRAF=null, scanVideo=null, scanCanvas=null;
 function scanToast(sn,dup){
   const li=document.createElement('div'); li.className='scanitem'+(dup?' dup':'');
   li.innerHTML=`<b>${esc(sn)}</b> ${dup?'· repeat — already inspected':'· added'}`;
@@ -985,24 +985,38 @@ function addScanned(raw){
   $('#scanMsg').textContent='Added ✓ '+sn+' — keep scanning, or close when done';
   if(navigator.vibrate) navigator.vibrate(dup?[50,40,50]:70);
 }
-function openScan(){
+async function openScan(){
   $('#scanModal').hidden=false; $('#scanList').innerHTML=''; $('#scanMsg').textContent='Starting camera…';
-  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ $('#scanMsg').textContent='This browser can’t use the camera here — open the page over https on your phone, or type the S/N below.'; return; }
-  if(typeof Html5Qrcode==='undefined'){ $('#scanMsg').textContent='Scanner library didn’t load (check your connection) — type the S/N below.'; return; }
-  const cfg={verbose:false};
-  if(typeof Html5QrcodeSupportedFormats!=='undefined') cfg.formatsToSupport=[Html5QrcodeSupportedFormats.QR_CODE];
-  try{ qrScanner=new Html5Qrcode('scanReader',cfg); }
-  catch(e){ $('#scanMsg').textContent='Scanner error: '+(e&&e.message||e); return; }
-  qrScanner.start({facingMode:'environment'},{fps:10},          /* full-frame scan (no qrbox crop) — reliable on iOS Safari */
-    txt=>addScanned(txt), ()=>{})
-   .then(()=>{ $('#scanMsg').textContent='Hold the QR code steady in the camera'; })
-   .catch(err=>{ const m=(err&&err.message||err||'').toString();
-     $('#scanMsg').textContent = /permission|denied|NotAllowed/i.test(m)
-       ? 'Camera blocked — allow camera access in your browser settings, then reopen. Or type the S/N below.'
-       : 'Couldn’t start the camera ('+m+'). Type the S/N below.'; });
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ $('#scanMsg').textContent='This browser can’t use the camera — open the page over https on your phone, or type the S/N below.'; return; }
+  if(typeof jsQR==='undefined'){ $('#scanMsg').textContent='Scanner didn’t load (check your connection) — type the S/N below.'; return; }
+  try{ scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }
+  catch(err){ const m=((err&&err.name)||'')+' '+((err&&err.message)||'');
+    $('#scanMsg').textContent=/NotAllowed|Permission|denied/i.test(m)
+      ? 'Camera blocked — allow camera access, then reopen. Or type the S/N below.'
+      : 'Couldn’t start the camera ('+m.trim()+'). Type the S/N below.'; return; }
+  const reader=$('#scanReader'); reader.innerHTML='';
+  scanVideo=document.createElement('video'); scanVideo.setAttribute('playsinline',''); scanVideo.muted=true; scanVideo.autoplay=true;
+  scanVideo.srcObject=scanStream; reader.appendChild(scanVideo);
+  try{ await scanVideo.play(); }catch(e){}
+  $('#scanMsg').textContent='Hold the QR code steady in the camera';
+  scanCanvas=document.createElement('canvas'); const ctx=scanCanvas.getContext('2d',{willReadFrequently:true});
+  const tick=()=>{
+    if(!scanStream) return;
+    const w=scanVideo.videoWidth, h=scanVideo.videoHeight;
+    if(w&&h&&scanVideo.readyState>=2){
+      scanCanvas.width=w; scanCanvas.height=h; ctx.drawImage(scanVideo,0,0,w,h);
+      let img=null; try{ img=ctx.getImageData(0,0,w,h); }catch(e){}
+      if(img){ const code=jsQR(img.data,w,h,{inversionAttempts:'attemptBoth'}); if(code&&code.data) addScanned(code.data); }
+    }
+    scanRAF=requestAnimationFrame(tick);
+  };
+  scanRAF=requestAnimationFrame(tick);
 }
 function closeScan(){
-  if(qrScanner){ qrScanner.stop().then(()=>qrScanner.clear()).catch(()=>{}); qrScanner=null; }
+  if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF=null; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+  if(scanVideo){ scanVideo.srcObject=null; scanVideo=null; }
+  $('#scanReader').innerHTML='';
   $('#scanModal').hidden=true; filter=''; $('#search').value=''; page=1; renderGrid();
 }
 $('#scanBtn').addEventListener('click',openScan);
