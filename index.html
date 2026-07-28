@@ -304,9 +304,16 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 .scanhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .scanhead span{font-family:var(--ff-display);font-weight:700;font-size:16px}
 .scanx{border:none;background:var(--surface);width:32px;height:32px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:15px}
-.scanreader{width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px}
+.scanreader{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px}
 .scanreader video{width:100%;display:block}
 .scanreader img{display:none}
+.scanframe{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64%;aspect-ratio:1;max-width:230px;pointer-events:none}
+.scanframe span{position:absolute;width:26px;height:26px;border:3px solid var(--accent)}
+.scanframe span:nth-child(1){top:0;left:0;border-right:0;border-bottom:0;border-top-left-radius:7px}
+.scanframe span:nth-child(2){top:0;right:0;border-left:0;border-bottom:0;border-top-right-radius:7px}
+.scanframe span:nth-child(3){bottom:0;left:0;border-right:0;border-top:0;border-bottom-left-radius:7px}
+.scanframe span:nth-child(4){bottom:0;right:0;border-left:0;border-top:0;border-bottom-right-radius:7px}
+.scanframe.hit span{border-color:var(--mod)}
 .scanmsg{font-size:13px;color:var(--muted);text-align:center;margin:12px 2px}
 .scanmanual{display:flex;gap:8px;margin-bottom:12px}
 .scanmanual input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);color:var(--text);font-size:16px;font-family:var(--ff-display);font-weight:600}
@@ -990,6 +997,7 @@ function fillScanBox(raw){
   if(!sn){ $('#scanMsg').textContent='No number found in that code — try again.'; return; }
   const now=Date.now(); if(sn===lastScan && now-lastScanT<1200) return; lastScan=sn; lastScanT=now;
   $('#scanManualSn').value=sn; scanPaused=true;
+  const f=$('#scanFrame'); if(f)f.classList.add('hit');
   $('#scanMsg').textContent='Scanned '+sn+' — check it, then tap Add';
   if(navigator.vibrate) navigator.vibrate(60);
 }
@@ -1005,6 +1013,7 @@ async function openScan(){
   const reader=$('#scanReader'); reader.innerHTML='';
   scanVideo=document.createElement('video'); scanVideo.setAttribute('playsinline',''); scanVideo.muted=true; scanVideo.autoplay=true;
   scanVideo.srcObject=scanStream; reader.appendChild(scanVideo);
+  const frame=document.createElement('div'); frame.className='scanframe'; frame.id='scanFrame'; frame.innerHTML='<span></span><span></span><span></span><span></span>'; reader.appendChild(frame);
   try{ await scanVideo.play(); }catch(e){}
   scanPaused=false; lastScan='';
   $('#scanMsg').textContent='Point the camera at the QR — the S/N fills the box below to verify';
@@ -1031,9 +1040,10 @@ function closeScan(){
 $('#scanBtn').addEventListener('click',openScan);
 $('#scanClose').addEventListener('click',closeScan);
 $('#scanModal').addEventListener('click',e=>{ if(e.target===$('#scanModal')) closeScan(); });
-$('#scanManualAdd').addEventListener('click',()=>{ const v=$('#scanManualSn').value; if(v.trim()){ addScanned(v); $('#scanManualSn').value=''; scanPaused=false; lastScan=''; } });
+function resumeScan(){ scanPaused=false; lastScan=''; const f=$('#scanFrame'); if(f)f.classList.remove('hit'); }
+$('#scanManualAdd').addEventListener('click',()=>{ const v=$('#scanManualSn').value; if(v.trim()){ addScanned(v); $('#scanManualSn').value=''; resumeScan(); } });
 $('#scanManualSn').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#scanManualAdd').click(); });
-$('#scanManualSn').addEventListener('input',()=>{ if(!$('#scanManualSn').value.trim()){ scanPaused=false; lastScan=''; $('#scanMsg').textContent='Point the camera at the QR — the S/N fills the box below to verify'; } });
+$('#scanManualSn').addEventListener('input',()=>{ if(!$('#scanManualSn').value.trim()){ resumeScan(); $('#scanMsg').textContent='Point the camera at the QR — the S/N fills the box below to verify'; } });
 
 /* CSV export/import */
 const CSVHEAD=['Load #','Date','S/N','Top Deck','Bottom','Separation','CB','MS','ML','CENB','Retire','QA Review','Notes','Extra'];
