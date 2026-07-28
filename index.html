@@ -533,7 +533,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
     <div id="scanReader" class="scanreader"></div>
     <div class="scanmsg" id="scanMsg">Point the camera at the pallet's QR or barcode</div>
     <div class="scanmanual">
-      <input type="text" id="scanManualSn" placeholder="…or type S/N (last 5 digits kept)" autocomplete="off" inputmode="numeric">
+      <input type="text" id="scanManualSn" placeholder="Scanned S/N appears here — verify, or type it" autocomplete="off" inputmode="numeric">
       <button class="gbtn primary" id="scanManualAdd">Add</button>
     </div>
     <div class="scanlist" id="scanList"></div>
@@ -968,7 +968,7 @@ $('#resetData').addEventListener('click',()=>{
 $('#undoBtn').addEventListener('click',doUndo);
 
 /* ===== QR / BARCODE SCAN → add pallet by S/N ===== */
-let lastScan='', lastScanT=0, scanStream=null, scanRAF=null, scanVideo=null, scanCanvas=null;
+let lastScan='', lastScanT=0, scanStream=null, scanRAF=null, scanVideo=null, scanCanvas=null, scanPaused=false;
 function scanToast(sn,dup){
   const li=document.createElement('div'); li.className='scanitem'+(dup?' dup':'');
   li.innerHTML=`<b>${esc(sn)}</b> ${dup?'· repeat — already inspected':'· added'}`;
@@ -977,13 +977,21 @@ function scanToast(sn,dup){
 function addScanned(raw){
   const sn=(raw||'').toString().replace(/\D/g,'').slice(-5);            // keep only the last 5 digits
   if(!sn){ $('#scanMsg').textContent='No number found in that code — try again.'; return; }
-  const now=Date.now(); if(sn===lastScan && now-lastScanT<2500) return; lastScan=sn; lastScanT=now;
   const dup=DATA.some(r=>(r.sn||'').trim()===sn);
   pushUndo();
   const o={}; COLS.forEach(c=>o[c]=(DMG.includes(c)?0:'')); o.date=new Date().toISOString().slice(0,10); o.sn=sn;
   DATA.unshift(o); saveData(); renderDashboard(); scanToast(sn,dup);
   $('#scanMsg').textContent='Added ✓ '+sn+' — keep scanning, or close when done';
   if(navigator.vibrate) navigator.vibrate(dup?[50,40,50]:70);
+}
+/* scan → fill the box for the user to verify, then they tap Add */
+function fillScanBox(raw){
+  const sn=(raw||'').toString().replace(/\D/g,'').slice(-5);
+  if(!sn){ $('#scanMsg').textContent='No number found in that code — try again.'; return; }
+  const now=Date.now(); if(sn===lastScan && now-lastScanT<1200) return; lastScan=sn; lastScanT=now;
+  $('#scanManualSn').value=sn; scanPaused=true;
+  $('#scanMsg').textContent='Scanned '+sn+' — check it, then tap Add';
+  if(navigator.vibrate) navigator.vibrate(60);
 }
 async function openScan(){
   $('#scanModal').hidden=false; $('#scanList').innerHTML=''; $('#scanMsg').textContent='Starting camera…';
@@ -998,15 +1006,16 @@ async function openScan(){
   scanVideo=document.createElement('video'); scanVideo.setAttribute('playsinline',''); scanVideo.muted=true; scanVideo.autoplay=true;
   scanVideo.srcObject=scanStream; reader.appendChild(scanVideo);
   try{ await scanVideo.play(); }catch(e){}
-  $('#scanMsg').textContent='Hold the QR code steady in the camera';
+  scanPaused=false; lastScan='';
+  $('#scanMsg').textContent='Point the camera at the QR — the S/N fills the box below to verify';
   scanCanvas=document.createElement('canvas'); const ctx=scanCanvas.getContext('2d',{willReadFrequently:true});
   const tick=()=>{
     if(!scanStream) return;
     const w=scanVideo.videoWidth, h=scanVideo.videoHeight;
-    if(w&&h&&scanVideo.readyState>=2){
+    if(w&&h&&scanVideo.readyState>=2 && !scanPaused){
       scanCanvas.width=w; scanCanvas.height=h; ctx.drawImage(scanVideo,0,0,w,h);
       let img=null; try{ img=ctx.getImageData(0,0,w,h); }catch(e){}
-      if(img){ const code=jsQR(img.data,w,h,{inversionAttempts:'attemptBoth'}); if(code&&code.data) addScanned(code.data); }
+      if(img){ const code=jsQR(img.data,w,h,{inversionAttempts:'attemptBoth'}); if(code&&code.data) fillScanBox(code.data); }
     }
     scanRAF=requestAnimationFrame(tick);
   };
@@ -1022,8 +1031,9 @@ function closeScan(){
 $('#scanBtn').addEventListener('click',openScan);
 $('#scanClose').addEventListener('click',closeScan);
 $('#scanModal').addEventListener('click',e=>{ if(e.target===$('#scanModal')) closeScan(); });
-$('#scanManualAdd').addEventListener('click',()=>{ const v=$('#scanManualSn').value; if(v.trim()){ addScanned(v); $('#scanManualSn').value=''; $('#scanManualSn').focus(); } });
+$('#scanManualAdd').addEventListener('click',()=>{ const v=$('#scanManualSn').value; if(v.trim()){ addScanned(v); $('#scanManualSn').value=''; scanPaused=false; lastScan=''; } });
 $('#scanManualSn').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#scanManualAdd').click(); });
+$('#scanManualSn').addEventListener('input',()=>{ if(!$('#scanManualSn').value.trim()){ scanPaused=false; lastScan=''; $('#scanMsg').textContent='Point the camera at the QR — the S/N fills the box below to verify'; } });
 
 /* CSV export/import */
 const CSVHEAD=['Load #','Date','S/N','Top Deck','Bottom','Separation','CB','MS','ML','CENB','Retire','QA Review','Notes','Extra'];
