@@ -230,6 +230,9 @@ tbody .tot td{background:var(--surface);font-weight:700;border-bottom:0;border-t
 .gbtn:hover{border-color:var(--accent-line)}
 .gbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .gbtn.danger:hover{border-color:var(--high);color:var(--high)}
+.gbtn.fixsn{border-color:var(--mod);color:var(--mod);background:var(--mod-bg)}
+.gbtn.fixsn:hover{border-color:var(--mod);filter:brightness(1.06)}
+.gbtn.fixsn[hidden]{display:none}
 .gbtn svg{width:14px;height:14px}
 .saved{font-size:12px;color:var(--accent);font-weight:600;opacity:0;transition:opacity .3s}
 .syncchip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;letter-spacing:.02em}
@@ -507,6 +510,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
         Repeats <span id="repCount"></span>
       </button>
       <div class="dbtns">
+        <button class="gbtn fixsn" id="fixSnBtn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Convert old S/N (<span id="fixSnCount">0</span>)</button>
         <button class="gbtn" id="exportCsv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export CSV</button>
         <button class="gbtn" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 8l5-5 5 5M12 3v12"/></svg>Import CSV</button>
         <input type="file" id="importFile" accept=".csv,text/csv" style="display:none">
@@ -907,6 +911,7 @@ function renderRepairParts(s){
 
 /* ===== MASTER RENDER ===== */
 function renderDashboard(){
+  updateFixSn();
   const s=compute();
   renderHero(s);renderKpis(s);renderBars(s);renderDonut(s);renderLoads(s);renderHeat(s);renderLabor();renderRepairParts(s);
   let repSerials=0; serialMap().forEach(v=>{if(v>1)repSerials++;});
@@ -1096,6 +1101,35 @@ $('#scanManualSn').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#scanM
 $('#scanManualSn').addEventListener('input',()=>{ if(!$('#scanManualSn').value.trim()){ resumeScan(); $('#scanMsg').textContent='Point the camera at the QR — the S/N fills the box below to verify'; } });
 
 /* CSV export/import */
+/* ===== Lift old short serials into the full 26 digit format =====
+   Records made before the scanner captured the whole code kept only the last few
+   digits. The button appears only while such rows exist and disappears once they
+   are gone, so it cannot be run twice by accident. Undo reverses it. */
+function shortSnRows(){const out=[];DATA.forEach((r,i)=>{const n=snDigits(r.sn).length;if(n>0&&n<=7)out.push(i);});return out;}
+function oddSnRows(){const out=[];DATA.forEach((r,i)=>{const n=snDigits(r.sn).length;if(n>7&&n<SN_LEN)out.push(i);});return out;}
+function updateFixSn(){
+  const btn=document.getElementById('fixSnBtn'); if(!btn)return;
+  const n=shortSnRows().length;
+  btn.hidden=(n===0);
+  const c=document.getElementById('fixSnCount'); if(c)c.textContent=fmt(n);
+}
+function runFixSn(){
+  const rows=shortSnRows(); if(!rows.length)return;
+  const odd=oddSnRows();
+  const sample=rows.slice(0,3).map(i=>'    '+DATA[i].sn+'   becomes   '+snExpand(DATA[i].sn)).join('\n');
+  let msg='Convert '+fmt(rows.length)+' old serials to the full format?\n\n'+sample;
+  if(rows.length>3) msg+='\n    ...and '+fmt(rows.length-3)+' more';
+  msg+='\n\nSerials that are already 26 digits are left alone.';
+  if(odd.length) msg+='\n'+fmt(odd.length)+' rows have 8 to 25 digits and will NOT be changed.';
+  msg+='\n\nUndo reverses this.';
+  if(!confirm(msg))return;
+  pushUndo();
+  rows.forEach(i=>{DATA[i].sn=snExpand(DATA[i].sn);});
+  saveData(); renderDashboard(); renderGrid();
+  alert('Converted '+fmt(rows.length)+' serials.'+(odd.length?'\nLeft '+fmt(odd.length)+' rows with 8 to 25 digits unchanged.':''));
+}
+document.getElementById('fixSnBtn').addEventListener('click',runFixSn);
+
 const CSVHEAD=['Load #','Date','S/N','Top Deck','Bottom','Separation','CB','MS','ML','CENB','Retire','QA Review','Notes','Extra'];
 function csvCell(v){v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 $('#exportCsv').addEventListener('click',()=>{
