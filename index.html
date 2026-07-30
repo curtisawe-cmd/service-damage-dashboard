@@ -239,7 +239,7 @@ tbody .tot td{background:var(--surface);font-weight:700;border-bottom:0;border-t
 .saved.on{opacity:1}
 .gridcard{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
 .gscroll{overflow-x:auto}
-table.grid{font-size:12.5px;min-width:900px}
+table.grid{font-size:12.5px;min-width:1040px}
 table.grid thead th{text-align:center;padding:10px 8px;font-size:10px}
 table.grid thead th.lft{text-align:left}
 table.grid tbody td{padding:5px 8px;text-align:center;border-bottom:1px solid var(--line)}
@@ -251,7 +251,7 @@ table.grid tbody tr:hover td{background:var(--accent-soft)}
   font-size:12.5px;padding:5px 6px;border-radius:6px;font-variant-numeric:tabular-nums}
 .gin:hover{border-color:var(--line)}
 .gin:focus{outline:none;border-color:var(--accent);background:var(--bg)}
-.gin.sn{width:56px;display:block;font-family:var(--ff-display);font-weight:600;text-align:left}
+.gin.sn{width:196px;display:block;font-family:var(--ff-display);font-weight:600;text-align:left;font-size:11.5px;letter-spacing:.01em}
 table.grid td.dnum{font-family:var(--ff-display);font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;font-size:12px}
 table.grid th.dnum{color:var(--muted)}
 .gin.load{width:46px;text-align:center}
@@ -259,9 +259,9 @@ table.grid th.dnum{color:var(--muted)}
 .gin.txt{text-align:left;min-width:140px;border-color:var(--line-strong);background:var(--surface)}
 .gin.txt:hover{border-color:var(--accent-line)}
 .gin.txt:focus{background:var(--bg)}
-.sncell{white-space:normal;text-align:left;vertical-align:middle;max-width:112px}
+.sncell{white-space:normal;text-align:left;vertical-align:middle;max-width:212px}
 .gin.sn.dup{border-color:var(--mod);background:var(--mod-bg);color:var(--mod);font-weight:700}
-.dupbadge{display:inline-flex;align-items:center;gap:3px;margin-top:4px;max-width:104px;font-family:var(--ff-display);font-weight:600;font-size:9.5px;
+.dupbadge{display:inline-flex;align-items:center;gap:3px;margin-top:4px;max-width:196px;font-family:var(--ff-display);font-weight:600;font-size:9.5px;
   color:var(--mod);background:var(--mod-bg);border:1px solid var(--mod);border-radius:5px;padding:1px 5px;vertical-align:middle;cursor:default;white-space:nowrap}
 .dupbadge svg{width:10px;height:10px;flex:none}
 .dupbadge b{font-weight:700;flex:none}
@@ -315,6 +315,10 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 .scanframe span:nth-child(4){bottom:0;right:0;border-left:0;border-top:0;border-bottom-right-radius:7px}
 .scanframe.hit span{border-color:var(--mod)}
 .scanmsg{font-size:13px;color:var(--muted);text-align:center;margin:12px 2px}
+.scanraw{font-size:11.5px;line-height:1.45;color:var(--faint);background:var(--surface);border:1px solid var(--line);
+  border-radius:9px;padding:8px 10px;margin-bottom:12px;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.scanraw[hidden]{display:none}
+.scanraw.warn{color:var(--mod);border-color:var(--mod);background:var(--mod-bg)}
 .scanmanual{display:flex;gap:8px;margin-bottom:12px}
 .scanmanual input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);color:var(--text);font-size:16px;font-family:var(--ff-display);font-weight:600}
 .scanmanual input:focus{outline:none;border-color:var(--accent);background:var(--bg)}
@@ -539,6 +543,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
     <div class="scanhead"><span>Scan pallet S/N</span><button class="scanx" id="scanClose" aria-label="Close">&#10005;</button></div>
     <div id="scanReader" class="scanreader"></div>
     <div class="scanmsg" id="scanMsg">Point the camera at the pallet's QR or barcode</div>
+    <div class="scanraw" id="scanRaw" hidden></div>
     <div class="scanmanual">
       <input type="text" id="scanManualSn" placeholder="Scanned S/N appears here — verify, or type it" autocomplete="off" inputmode="numeric">
       <button class="gbtn primary" id="scanManualAdd">Add</button>
@@ -554,6 +559,35 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 <script>
 /* ===== DATA MODEL ===== */
 const COLS=['load','date','sn','td','bd','sep','cb','ms','ml','cenb','retire','qa','notes','extra'];
+
+/* ===== SERIAL NUMBER FORMAT =====
+   A full pallet serial is 26 digits, displayed in five groups of 5 7 5 1 8:
+       80030 0198560 15103 1 10000000
+   Records created before the scanner captured the whole code kept only the last
+   few digits. snExpand() lifts a short code into the trailing zeros of the final
+   group, so 2013 becomes 80030 0198560 15103 1 10002013.
+   All comparisons go through snKey() so spacing never affects a match. */
+const SN_GROUPS=[5,7,5,1,8];
+const SN_LEN=26;
+const SN_PREFIX='800300198560151031';        // groups 1 to 4, 18 digits
+
+function snDigits(v){ return (v==null?'':String(v)).replace(/\D/g,''); }
+function snKey(v){ return snDigits(v); }     // spacing insensitive identity for a serial
+function snFormat(v){
+  const d=snDigits(v);
+  if(d.length!==SN_LEN) return d;            // not a full serial, show the digits as they are
+  const out=[]; let i=0;
+  for(const n of SN_GROUPS){ out.push(d.substr(i,n)); i+=n; }
+  return out.join(' ');
+}
+function snExpand(v){
+  const d=snDigits(v);
+  if(!d) return '';
+  if(d.length>=SN_LEN) return snFormat(d.slice(-SN_LEN));
+  if(d.length>7) return d;                   // too long to seat in the last group, leave alone
+  return snFormat(SN_PREFIX+'1'+d.padStart(7,'0'));
+}
+function snIsFull(v){ return snDigits(v).length===SN_LEN; }
 const DMG=['td','bd','sep','cb','ms','ml','cenb','retire'];
 const ZLABEL={td:'Top Deck',bd:'Bottom',sep:'Separation',cb:'Corner (CB)',ms:'Short Side (MS)',ml:'Long Side (ML)',cenb:'Center (CENB)',retire:'Retire'};
 const HEATNAME={TD:'Top Deck',BD:'Bottom Deck',CB:'Corner Block',MS:'Middle Short Side',ML:'Middle Long Side',CENB:'Center Block'};
@@ -881,7 +915,7 @@ function renderDashboard(){
 
 /* ===== DATA GRID ===== */
 let page=1, PER=100, filter='', repeatsOnly=false;
-function serialMap(){const m=new Map();DATA.forEach(r=>{const k=(r.sn||'').trim();if(k)m.set(k,(m.get(k)||0)+1);});return m;}
+function serialMap(){const m=new Map();DATA.forEach(r=>{const k=snKey(r.sn);if(k)m.set(k,(m.get(k)||0)+1);});return m;}
 /* running #/Day: within each date, oldest = 1 … newest = total inspected that date (grid is newest-first) */
 function dayNumbers(){const c={},out=new Array(DATA.length);
   for(let i=DATA.length-1;i>=0;i--){const d=(DATA[i].date||'').trim();
@@ -889,16 +923,17 @@ function dayNumbers(){const c={},out=new Array(DATA.length);
   return out;}
 const REPICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
 /* where else this S/N appears (load · date of the other inspection records) */
-function otherLocations(val,exceptIdx){const k=(val||'').trim(),out=[];if(!k)return out;
-  DATA.forEach((r,j)=>{if(j!==exceptIdx&&(r.sn||'').trim()===k){const L=(r.load||'').trim(),d=(r.date||'').trim();
+function otherLocations(val,exceptIdx){const k=snKey(val),out=[];if(!k)return out;
+  DATA.forEach((r,j)=>{if(j!==exceptIdx&&snKey(r.sn)===k){const L=(r.load||'').trim(),d=(r.date||'').trim();
     out.push(L||d?((L?'Load '+L:'no load')+(d?' · '+niceDate(d):'')):'unassigned');}});return out;}
 function dupBadge(count,locs){if(count<2)return '';const extra=locs.length>1?` +${locs.length-1}`:'';
   return `<span class="dupbadge" title="${esc('This pallet was inspected '+count+' times. Also at: '+(locs.join('; ')||'unknown'))}">${REPICON}<b>${count}×</b>${locs[0]?`<span>${esc(locs[0])}${extra}</span>`:''}</span>`;}
 function filteredIdx(){
   let idx=DATA.map((_,i)=>i);
-  if(repeatsOnly){const SN=serialMap();idx=idx.filter(i=>{const k=(DATA[i].sn||'').trim();return k&&SN.get(k)>1;});}
-  if(filter){const q=filter.toLowerCase();idx=idx.filter(i=>{const r=DATA[i];
-    return (r.sn||'').toLowerCase().includes(q)||(r.load||'').toString().toLowerCase().includes(q)
+  if(repeatsOnly){const SN=serialMap();idx=idx.filter(i=>{const k=snKey(DATA[i].sn);return k&&SN.get(k)>1;});}
+  if(filter){const q=filter.toLowerCase(), qd=snDigits(filter);idx=idx.filter(i=>{const r=DATA[i];
+    return (r.sn||'').toLowerCase().includes(q)||(qd&&snDigits(r.sn).includes(qd))
+      ||(r.load||'').toString().toLowerCase().includes(q)
       ||(r.notes||'').toLowerCase().includes(q)||(r.qa||'').toLowerCase().includes(q);});}
   return idx;
 }
@@ -908,7 +943,7 @@ function renderGrid(){
   const start=(page-1)*PER, slice=idx.slice(start,start+PER);
   const SN=serialMap(), DAYN=dayNumbers();
   const dcell=(i,f,blk)=>`<button class="dmgcell ${+DATA[i][f]?'on':''} ${blk?'blk2':''}" data-dmg="${f}" data-idx="${i}" title="${ZLABEL[f]}">x</button>`;
-  const snCell=(i,r)=>{const k=(r.sn||'').trim(),n=k?SN.get(k):0,dup=n>1;
+  const snCell=(i,r)=>{const k=snKey(r.sn),n=k?SN.get(k):0,dup=n>1;
     return `<input class="gin sn ${dup?'dup':''}" data-idx="${i}" data-field="sn" value="${esc(r.sn)}" title="${dup?'Repeat pallet, already inspected before':''}">${dup?dupBadge(n,otherLocations(r.sn,i)):''}`;};
   $('#gridBody').innerHTML = slice.length ? slice.map(i=>{const r=DATA[i];
     return `<tr>
@@ -940,6 +975,7 @@ const esc=s=>(s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
 $('#gridBody').addEventListener('change',e=>{
   const inp=e.target.closest('input[data-field]'); if(!inp)return;
   pushUndo();
+  if(inp.dataset.field==='sn') inp.value=snExpand(inp.value);   // regroup whatever was typed
   DATA[+inp.dataset.idx][inp.dataset.field]=inp.value;
   saveData(); renderDashboard();
 });
@@ -983,27 +1019,39 @@ function scanToast(sn,dup){
   const list=$('#scanList'); list.prepend(li); while(list.children.length>6) list.lastChild.remove();
 }
 function addScanned(raw){
-  const sn=(raw||'').toString().replace(/\D/g,'').slice(-5);            // keep only the last 5 digits
-  if(!sn){ $('#scanMsg').textContent='No number found in that code — try again.'; return; }
-  const dup=DATA.some(r=>(r.sn||'').trim()===sn);
+  const sn=snExpand(raw);                                   // the whole code, grouped 5 7 5 1 8
+  if(!sn){ $('#scanMsg').textContent='No number found in that code, try again.'; return; }
+  const dup=DATA.some(r=>snKey(r.sn)===snKey(sn));
   pushUndo();
   const o={}; COLS.forEach(c=>o[c]=(DMG.includes(c)?0:'')); o.date=new Date().toISOString().slice(0,10); o.sn=sn;
   DATA.unshift(o); saveData(); renderDashboard(); scanToast(sn,dup);
   $('#scanMsg').textContent='Added ✓ '+sn+' — keep scanning, or close when done';
   if(navigator.vibrate) navigator.vibrate(dup?[50,40,50]:70);
 }
+/* Exact text the camera decoded, before any parsing. Lets an odd code be checked by eye. */
+function showScanRaw(txt,digits){
+  const el=$('#scanRaw'); if(!el) return;
+  if(!txt){ el.hidden=true; el.textContent=''; return; }
+  el.hidden=false;
+  el.textContent='Read from code: '+txt+'  ('+digits.length+' digits)';
+  el.classList.toggle('warn',digits.length!==SN_LEN);
+}
 /* scan → fill the box for the user to verify, then they tap Add */
 function fillScanBox(raw){
-  const sn=(raw||'').toString().replace(/\D/g,'').slice(-5);
-  if(!sn){ $('#scanMsg').textContent='No number found in that code — try again.'; return; }
+  const txt=(raw==null?'':String(raw)), d=snDigits(txt);
+  showScanRaw(txt,d);
+  const sn=snExpand(txt);
+  if(!sn){ $('#scanMsg').textContent='No number found in that code, try again.'; return; }
   const now=Date.now(); if(sn===lastScan && now-lastScanT<1200) return; lastScan=sn; lastScanT=now;
   $('#scanManualSn').value=sn; scanPaused=true;
   const f=$('#scanFrame'); if(f)f.classList.add('hit');
-  $('#scanMsg').textContent='Scanned '+sn+' — check it, then tap Add';
+  $('#scanMsg').textContent = d.length===SN_LEN
+    ? 'Scanned '+sn+', check it then tap Add'
+    : 'Read '+d.length+' digits, expected '+SN_LEN+'. Check the raw reading below before adding.';
   if(navigator.vibrate) navigator.vibrate(60);
 }
 async function openScan(){
-  $('#scanModal').hidden=false; $('#scanList').innerHTML=''; $('#scanMsg').textContent='Starting camera…';
+  $('#scanModal').hidden=false; $('#scanList').innerHTML=''; showScanRaw(''); $('#scanMsg').textContent='Starting camera…';
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ $('#scanMsg').textContent='This browser can’t use the camera — open the page over https on your phone, or type the S/N below.'; return; }
   if(typeof jsQR==='undefined'){ $('#scanMsg').textContent='Scanner didn’t load (check your connection) — type the S/N below.'; return; }
   try{ scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); }
