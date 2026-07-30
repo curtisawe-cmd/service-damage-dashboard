@@ -634,7 +634,9 @@ function startSync(){
 let undoStack=[];
 function pushUndo(){undoStack.push(JSON.stringify(DATA.map(objToRow)));if(undoStack.length>5)undoStack.shift();updateUndoBtn();}
 function updateUndoBtn(){const b=document.getElementById('undoBtn');if(!b)return;b.disabled=undoStack.length===0;const c=b.querySelector('.uc');if(c)c.textContent=undoStack.length?`(${undoStack.length})`:'';}
-function doUndo(){if(!undoStack.length)return;DATA=JSON.parse(undoStack.pop()).map(rowToObj);saveData();renderDashboard();renderGrid();updateUndoBtn();}
+function doUndo(){if(!undoStack.length)return;DATA=JSON.parse(undoStack.pop()).map(rowToObj);
+  DATA.forEach(r=>{r.sn=snExpand(r.sn);});   // a snapshot taken before the serial conversion must not bring short codes back
+  saveData();renderDashboard();renderGrid();updateUndoBtn();}
 
 const $=s=>document.querySelector(s);
 const fmt=n=>Math.round(n).toLocaleString('en-US');
@@ -1104,7 +1106,8 @@ $('#scanManualSn').addEventListener('input',()=>{ if(!$('#scanManualSn').value.t
 /* ===== Lift old short serials into the full 26 digit format =====
    Records made before the scanner captured the whole code kept only the last few
    digits. The button appears only while such rows exist and disappears once they
-   are gone, so it cannot be run twice by accident. Undo reverses it. */
+   are gone, so it cannot be run twice by accident. Deliberately not undoable, the
+   old short codes are not something to go back to. */
 function shortSnRows(){const out=[];DATA.forEach((r,i)=>{const n=snDigits(r.sn).length;if(n>0&&n<=7)out.push(i);});return out;}
 function oddSnRows(){const out=[];DATA.forEach((r,i)=>{const n=snDigits(r.sn).length;if(n>7&&n<SN_LEN)out.push(i);});return out;}
 function updateFixSn(){
@@ -1121,9 +1124,8 @@ function runFixSn(){
   if(rows.length>3) msg+='\n    ...and '+fmt(rows.length-3)+' more';
   msg+='\n\nSerials that are already 26 digits are left alone.';
   if(odd.length) msg+='\n'+fmt(odd.length)+' rows have 8 to 25 digits and will NOT be changed.';
-  msg+='\n\nUndo reverses this.';
+  msg+='\n\nThis one cannot be undone.';
   if(!confirm(msg))return;
-  pushUndo();
   rows.forEach(i=>{DATA[i].sn=snExpand(DATA[i].sn);});
   saveData(); renderDashboard(); renderGrid();
   alert('Converted '+fmt(rows.length)+' serials.'+(odd.length?'\nLeft '+fmt(odd.length)+' rows with 8 to 25 digits unchanged.':''));
