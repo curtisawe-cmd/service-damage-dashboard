@@ -548,6 +548,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
@@ -567,8 +568,8 @@ function saveData(){try{localStorage.setItem(LS_KEY,JSON.stringify(DATA.map(objT
 let DATA=loadData();
 /* ===== FIREBASE LIVE SYNC — every edit syncs to everyone viewing the page ===== */
 const firebaseConfig={apiKey:"AIzaSyBcDPh--DIGbuDUQlGvQ_pV1rkaGXVvoL0",authDomain:"service-damage-dash-board.firebaseapp.com",databaseURL:"https://service-damage-dash-board-default-rtdb.firebaseio.com",projectId:"service-damage-dash-board",storageBucket:"service-damage-dash-board.firebasestorage.app",messagingSenderId:"216625096385",appId:"1:216625096385:web:e7c92610f1baed768cd640"};
-let dbRef=null, fbTimer=null, pendingRemote=null;
-try{ firebase.initializeApp(firebaseConfig); dbRef=firebase.database().ref('pallets'); }catch(e){ console.warn('Firebase unavailable — running local-only',e); }
+let dbRef=null, fbTimer=null, pendingRemote=null, fbAuth=null;
+try{ firebase.initializeApp(firebaseConfig); fbAuth=firebase.auth(); }catch(e){ console.warn('Firebase unavailable, sign in cannot run',e); }
 function pushToFirebase(){ if(!dbRef)return; clearTimeout(fbTimer); const payload=DATA.map(objToRow);
   fbTimer=setTimeout(()=>{ dbRef.set(payload).catch(()=>setSync('offline')); },300); }
 function normalizeRows(val){ const a=Array.isArray(val)?val:Object.keys(val).sort((x,y)=>x-y).map(k=>val[k]); return a.filter(Boolean).map(rowToObj); }
@@ -1127,12 +1128,108 @@ function setView(v){
 }
 $('#viewBtn').addEventListener('click',()=>setView(document.body.dataset.view==='dash'?'data':'dash'));
 
+/* ===== ACCESS GATE =====
+   The shared crew account. Only the password is secret; this address is just the
+   identifier the account is registered under in Firebase Authentication. */
+const CREW_EMAIL='crew@service-damage-dash-board.local';
+
+function buildGate(){
+  if(document.getElementById('authGate')) return;
+  const st=document.createElement('style');
+  st.textContent=`
+  #authGate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:var(--bg)}
+  #authGate::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(1200px 600px at 88% -8%,var(--accent-soft),transparent 60%)}
+  #authGate .card{position:relative;width:100%;max-width:360px;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:16px;padding:30px 26px;box-shadow:var(--shadow);text-align:center}
+  #authGate h2{font-family:var(--ff-display);font-size:19px;line-height:1.3;margin-bottom:6px}
+  #authGate .sub{font-size:13px;color:var(--muted);margin-bottom:20px}
+  #authGate input{width:100%;padding:11px 13px;border:1px solid var(--line-strong);border-radius:10px;
+    background:var(--bg);color:var(--text);font-family:var(--ff-body);font-size:16px}
+  #authGate input:focus{outline:none;border-color:var(--accent)}
+  #authGate button{width:100%;margin-top:12px;padding:11px 13px;border:1px solid var(--accent);border-radius:10px;
+    background:var(--accent);color:#fff;font-family:var(--ff-body);font-size:14px;font-weight:600;cursor:pointer}
+  #authGate button[disabled]{opacity:.55;cursor:default}
+  #authGate .err{margin-top:12px;font-size:13px;color:var(--high);min-height:18px}`;
+  document.head.appendChild(st);
+
+  const d=document.createElement('div');
+  d.id='authGate';
+  d.innerHTML='<div class="card">'
+    +'<h2>Service Damage Dashboard</h2>'
+    +'<div class="sub">Enter the crew password to continue.</div>'
+    +'<input id="gatePw" type="password" autocomplete="current-password" placeholder="Password" aria-label="Crew password">'
+    +'<button id="gateBtn" type="button">Unlock</button>'
+    +'<div class="err" id="gateErr" role="alert"></div>'
+    +'</div>';
+  document.body.appendChild(d);
+
+  document.getElementById('gateBtn').addEventListener('click',gateSubmit);
+  document.getElementById('gatePw').addEventListener('keydown',e=>{ if(e.key==='Enter') gateSubmit(); });
+}
+function showGate(msg){
+  buildGate();
+  document.getElementById('authGate').style.display='flex';
+  const btn=document.getElementById('gateBtn'), pw=document.getElementById('gatePw');
+  btn.disabled=false; pw.value='';
+  document.getElementById('gateErr').textContent=msg||'';
+  pw.focus();
+}
+function hideGate(){ const g=document.getElementById('authGate'); if(g) g.style.display='none'; }
+
+function gateSubmit(){
+  const pw=document.getElementById('gatePw'), btn=document.getElementById('gateBtn'), err=document.getElementById('gateErr');
+  if(!fbAuth){ err.textContent='Cannot reach the sign in service. Check your connection.'; return; }
+  if(!pw.value){ err.textContent='Enter the password.'; return; }
+  btn.disabled=true; err.textContent='Checking...';
+  fbAuth.signInWithEmailAndPassword(CREW_EMAIL,pw.value).catch(e=>{
+    btn.disabled=false; pw.select();
+    const code=(e&&e.code)||'';
+    err.textContent = code==='auth/too-many-requests'
+      ? 'Too many tries. Wait a minute, then try again.'
+      : (code==='auth/network-request-failed' ? 'No connection. Check your network and try again.'
+                                              : 'That password is not right.');
+  });
+}
+
+function addLockButton(){
+  if(document.getElementById('lockBtn')) return;
+  const view=document.getElementById('viewBtn'); if(!view) return;
+  const b=document.createElement('button');
+  b.className='hbtn'; b.id='lockBtn'; b.type='button';
+  b.setAttribute('aria-label','Lock the dashboard and sign out');
+  b.innerHTML='<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    +'stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/>'
+    +'<path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Lock</span>';
+  b.addEventListener('click',()=>{ if(fbAuth) fbAuth.signOut(); });
+  view.parentNode.insertBefore(b,view);
+}
+
+function initAuthGate(){
+  if(!fbAuth){ showGate('Cannot reach the sign in service. Check your connection.'); return; }
+  showGate();
+  fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+  fbAuth.onAuthStateChanged(user=>{
+    if(user){
+      hideGate();
+      addLockButton();
+      if(!dbRef){ dbRef=firebase.database().ref('pallets'); startSync(); }
+    }else{
+      // Signed out: drop the cached copy so the next person at this device sees nothing.
+      try{ localStorage.removeItem(LS_KEY); }catch(e){}
+      if(dbRef){ location.reload(); return; }
+      showGate();
+    }
+  });
+}
+
 /* ===== INIT ===== */
 renderDashboard();
 renderGrid();
 updateUndoBtn();
 setView('data');
-startSync();
+initAuthGate();
 </script>
 </body>
 </html>
