@@ -35,6 +35,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-body);font-size
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:radial-gradient(1200px 600px at 88% -8%,var(--accent-soft),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg-alt))}
 .wrap{max-width:1200px;margin:0 auto;padding:0 clamp(16px,4vw,40px)}
+/* the data grid has more columns than the dashboard, so let it use the whole monitor */
+@media(min-width:1200px){body[data-view="data"] main.wrap{max-width:1560px}}
 h1,h2,h3,.num{font-family:var(--ff-display)}
 .tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 
@@ -243,9 +245,9 @@ tbody .tot td{background:var(--surface);font-weight:700;border-bottom:0;border-t
 .gridcard{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
 .gscroll{overflow-x:auto}
 table.grid{font-size:12.5px;min-width:1080px}
-table.grid thead th{text-align:center;padding:10px 8px;font-size:10px}
+table.grid thead th{text-align:center;padding:10px 6px;font-size:10px}
 table.grid thead th.lft{text-align:left}
-table.grid tbody td{padding:5px 8px;text-align:center;border-bottom:1px solid var(--line)}
+table.grid tbody td{padding:5px 6px;text-align:center;border-bottom:1px solid var(--line)}
 table.grid td.delcell,table.grid th.delcell{position:sticky;right:0;z-index:2;width:42px;padding-left:6px;padding-right:10px}
 table.grid td.delcell{background:var(--surface-2);box-shadow:-9px 0 10px -8px rgba(0,0,0,.18)}
 table.grid th.delcell{background:var(--surface);box-shadow:-9px 0 10px -8px rgba(0,0,0,.18)}
@@ -255,11 +257,11 @@ table.grid tbody tr:hover td{background:var(--accent-soft)}
 .gin:hover{border-color:var(--line)}
 .gin:focus{outline:none;border-color:var(--accent);background:var(--bg)}
 /* 26 digits in five groups. Sized in ch so it holds the whole serial whatever the font does. */
-.gin.sn{width:calc(31ch + 20px);display:block;font-family:var(--ff-display);font-weight:600;text-align:left;font-size:11.5px;letter-spacing:.01em}
+.gin.sn{width:calc(28ch + 14px);display:block;font-family:var(--ff-display);font-weight:600;text-align:left;font-size:11.5px;letter-spacing:.01em}
 table.grid td.dnum{font-family:var(--ff-display);font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;font-size:12px}
 table.grid th.dnum{color:var(--muted)}
 .gin.load{width:46px;text-align:center}
-.gin.date{width:130px}
+.gin.date{width:112px}
 .gin.txt{text-align:left;min-width:140px;border-color:var(--line-strong);background:var(--surface)}
 .gin.txt:hover{border-color:var(--accent-line)}
 .gin.txt:focus{background:var(--bg)}
@@ -522,7 +524,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
       <div class="gscroll"><table class="grid" id="grid">
         <thead><tr>
           <th class="lft">Load</th><th class="lft">Date</th><th class="dnum" title="Running count of pallets inspected on this date">#/Day</th><th class="lft">S/N</th>
-          <th>Top Deck</th><th>Bottom</th><th>Sep</th><th>CB</th><th>MS</th><th>ML</th><th>CENB</th><th>Retire</th>
+          <th title="Top Deck">TD</th><th title="Bottom Deck">BD</th><th title="Separation">SEP</th><th title="Corner Block">CB</th><th title="Middle Short Side">MS</th><th title="Middle Long Side">ML</th><th title="Center Block">CENB</th><th title="Retire">RET</th>
           <th class="lft">QA</th><th class="lft">Notes</th><th class="delcell"></th>
         </tr></thead>
         <tbody id="gridBody"></tbody>
