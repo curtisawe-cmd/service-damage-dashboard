@@ -280,7 +280,7 @@ table.grid th.dnum{color:var(--muted)}
   cursor:pointer;color:var(--faint);display:inline-flex;align-items:center;justify-content:center;padding:0}
 .delrow:hover{border-color:var(--high);color:var(--high)}
 .delrow svg{width:13px;height:13px}
-.pager{display:flex;align-items:center;gap:12px;justify-content:center;padding:14px;border-top:1px solid var(--line)}
+.pager{display:flex;align-items:center;gap:12px;justify-content:center;padding:14px;border-bottom:1px solid var(--line)}
 .pager .pinfo{font-size:12.5px;color:var(--muted)}
 .pgbtn{cursor:pointer;border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);
   border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:600}
@@ -518,6 +518,7 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
       </div>
     </div>
     <div class="gridcard">
+      <div class="pager" id="pager"></div>
       <div class="gscroll"><table class="grid" id="grid">
         <thead><tr>
           <th class="lft">Load</th><th class="lft">Date</th><th class="dnum" title="Running count of pallets inspected on this date">#/Day</th><th class="lft">S/N</th>
@@ -526,7 +527,6 @@ footer{padding:34px 0 46px;color:var(--faint);font-size:12.5px}
         </tr></thead>
         <tbody id="gridBody"></tbody>
       </table></div>
-      <div class="pager" id="pager"></div>
     </div>
   </section>
 
@@ -972,11 +972,14 @@ function renderGrid(){
     <span class="pinfo">${shown} of ${fmt(idx.length)}${filter?' (filtered)':''} · page ${page}/${pages}</span>
     <button class="pgbtn" id="next" ${page>=pages?'disabled':''}>Next ›</button>
     <button class="pgbtn" id="last" ${page>=pages?'disabled':''}>Last »</button>`;
+  /* the pager sits above the table, so a page change scrolls back to the first row */
+  const goPage=n=>{if(n===page)return;page=n;renderGrid();
+    const c=document.querySelector('.gridcard'); if(c)c.scrollIntoView({block:'start',behavior:'smooth'});};
   const fst=$('#first'), pv=$('#prev'), nx=$('#next'), lst=$('#last');
-  if(fst)fst.addEventListener('click',()=>{if(page!==1){page=1;renderGrid();}});
-  if(pv)pv.addEventListener('click',()=>{if(page>1){page--;renderGrid();}});
-  if(nx)nx.addEventListener('click',()=>{if(page<pages){page++;renderGrid();}});
-  if(lst)lst.addEventListener('click',()=>{if(page!==pages){page=pages;renderGrid();}});
+  if(fst)fst.addEventListener('click',()=>goPage(1));
+  if(pv)pv.addEventListener('click',()=>{if(page>1)goPage(page-1);});
+  if(nx)nx.addEventListener('click',()=>{if(page<pages)goPage(page+1);});
+  if(lst)lst.addEventListener('click',()=>goPage(pages));
 }
 const esc=s=>(s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 
